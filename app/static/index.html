@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Разбор переписки</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Literata:opsz,wght@7..72,400;7..72,500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #E9EDF2;
+    --surface: #FFFFFF;
+    --sunken: #F3F5F8;
+    --ink: #1C2230;
+    --muted: #5E6778;
+    --line: #D5DBE3;
+    --accent: #2946B8;
+    --accent-ink: #FFFFFF;
+    --ok: #1E7A55;
+    --warn: #9A5A06;
+    --error: #B42335;
+    --p0: #1E8A7A; --p1: #7B4FC9; --p2: #B06F00;
+    --p3: #C2416B; --p4: #2F6FD6; --p5: #4E8A2E;
+    --sans: "Onest", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    --serif: "Literata", Georgia, "Times New Roman", serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141920;
+      --surface: #1D242F;
+      --sunken: #171D26;
+      --ink: #E6EAF0;
+      --muted: #9AA3B2;
+      --line: #2E3744;
+      --accent: #8EA6FF;
+      --accent-ink: #0E1320;
+      --ok: #5CC896;
+      --warn: #E6AA55;
+      --error: #FF8A95;
+      --p0: #4FC7B4; --p1: #B395F2; --p2: #E8B04A;
+      --p3: #F07AA0; --p4: #7FAEFF; --p5: #93C96B;
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 16px/1.5 var(--sans);
+  }
+  button, input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .page { max-width: 1240px; margin: 0 auto; padding: 40px 24px 56px; }
+
+  header { margin-bottom: 28px; max-width: 60ch; }
+  h1 { font-size: 30px; line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 8px; }
+  header p { margin: 0; color: var(--muted); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+  }
+
+  /* ---------- Переписка ---------- */
+  .chat { display: flex; flex-direction: column; min-height: 560px; }
+  .chat-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    padding: 18px 20px 14px; border-bottom: 1px solid var(--line);
+  }
+  h2 { font-size: 18px; font-weight: 600; margin: 0; }
+  .count { color: var(--muted); font-size: 14px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 20px 0; }
+  .link-btn {
+    border: 0; background: none; padding: 4px 8px; margin-left: -8px; border-radius: 8px;
+    color: var(--accent); font-size: 14px; font-weight: 500; cursor: pointer;
+  }
+  .link-btn:hover { background: var(--sunken); }
+
+  .messages {
+    list-style: none; margin: 0; padding: 16px 20px;
+    flex: 1; overflow-y: auto; max-height: 520px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .empty-chat { color: var(--muted); font-size: 15px; margin: auto 0; text-align: center; padding: 32px 12px; }
+  .msg { display: flex; gap: 10px; align-items: flex-end; }
+  .avatar {
+    flex: none; width: 32px; height: 32px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--person); color: var(--surface);
+    font-weight: 600; font-size: 14px;
+  }
+  .bubble {
+    position: relative;
+    background: var(--sunken);
+    border-radius: 14px 14px 14px 4px;
+    padding: 8px 34px 9px 12px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .bubble .who { display: block; color: var(--person); font-weight: 600; font-size: 14px; line-height: 1.3; }
+  .remove {
+    position: absolute; top: 4px; right: 4px;
+    width: 24px; height: 24px; border: 0; border-radius: 6px;
+    background: none; color: var(--muted); cursor: pointer; opacity: 0;
+    font-size: 16px; line-height: 1;
+  }
+  .msg:hover .remove, .remove:focus-visible { opacity: 1; }
+  .remove:hover { background: var(--line); }
+
+  .composer {
+    display: grid; grid-template-columns: 110px 1fr auto; gap: 8px;
+    padding: 12px 20px; border-top: 1px solid var(--line);
+  }
+  .field {
+    width: 100%; min-width: 0;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface); padding: 9px 12px;
+  }
+  .field::placeholder { color: var(--muted); }
+  .btn {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+    padding: 9px 14px; font-weight: 500; cursor: pointer;
+  }
+  .btn:hover { background: var(--sunken); }
+  .primary {
+    margin: 0 20px 20px; padding: 13px 16px;
+    border: 0; border-radius: 12px;
+    background: var(--accent); color: var(--accent-ink);
+    font-weight: 600; font-size: 16px; cursor: pointer;
+  }
+  .primary:disabled { opacity: 0.5; cursor: default; }
+
+  /* ---------- Разбор ---------- */
+  .digest { padding: 28px 32px 32px; min-height: 560px; }
+  @media (max-width: 900px) { .digest, .chat { min-height: 0; } .placeholder { margin: 48px auto; } .loading { margin: 48px 0; } }
+  @media (max-width: 600px) { .digest { padding: 22px 20px; } .composer { grid-template-columns: 1fr auto; } .composer .name { grid-column: 1 / -1; } }
+
+  .placeholder { color: var(--muted); max-width: 42ch; margin: 120px auto 0; text-align: center; }
+  .loading { display: flex; align-items: center; gap: 12px; justify-content: center; margin-top: 140px; color: var(--muted); }
+  .spinner {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+  .error { border-left: 3px solid var(--error); padding: 4px 0 4px 16px; margin-top: 40px; }
+  .error strong { color: var(--error); }
+  .error p { margin: 4px 0 0; color: var(--muted); }
+
+  .section + .section { margin-top: 30px; }
+  h3 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 0 0 10px; }
+  .summary {
+    font-family: var(--serif); font-size: 20px; line-height: 1.6;
+    margin: 0; max-width: 62ch;
+  }
+
+  .tasks { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  .task {
+    display: grid; grid-template-columns: auto 32px 1fr; gap: 12px; align-items: center;
+    padding: 12px 0; border-bottom: 1px solid var(--line);
+  }
+  .task input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+  .task .avatar.none { background: var(--line); color: var(--muted); }
+  .task-text { overflow-wrap: anywhere; }
+  .task-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 2px; font-size: 14px; color: var(--muted); }
+  .task-meta .who { color: var(--person, var(--muted)); font-weight: 600; }
+  .deadline { border: 1px solid var(--line); border-radius: 6px; padding: 0 7px; }
+  .task.done .task-text { text-decoration: line-through; color: var(--muted); }
+  .task-text::first-letter, .decisions li::first-letter { text-transform: uppercase; }  .task-text::first-letter, .decisions li::first-letter { text-transform: uppercase; }
+
+  .decisions { margin: 0; padding-left: 20px; }
+  .decisions li + li { margin-top: 6px; }
+  .none { color: var(--muted); margin: 0; }
+
+  .verdict { display: flex; gap: 10px; align-items: baseline; }
+  .verdict .mark { font-weight: 700; }
+  .verdict.ok .mark { color: var(--ok); }
+  .verdict.warn .mark { color: var(--warn); }
+  .issues { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
+
+  .trace { margin-top: 36px; padding-top: 20px; border-top: 1px dashed var(--line); }
+  .trace h3 { margin-bottom: 4px; }
+  .trace-note { font-size: 14px; color: var(--muted); margin: 0 0 14px; }
+  .round-label { font-size: 13px; color: var(--muted); margin: 10px 0 6px; }
+  .bar-row { display: grid; grid-template-columns: 112px 1fr 64px; gap: 10px; align-items: center; font-size: 14px; }
+  .bar-row + .bar-row { margin-top: 5px; }
+  .track { position: relative; height: 10px; background: var(--sunken); border-radius: 5px; }
+  .bar { position: absolute; top: 0; bottom: 0; min-width: 4px; border-radius: 5px; background: var(--accent); }
+  .bar.critic { background: var(--ok); }
+  .ms { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+  dialog {
+    border: 1px solid var(--line); border-radius: 16px; padding: 24px;
+    width: min(560px, calc(100% - 32px));
+    background: var(--surface); color: var(--ink);
+  }
+  dialog::backdrop { background: rgb(10 14 22 / 0.45); }
+  dialog h2 { margin-bottom: 6px; }
+  dialog p { margin: 0 0 12px; color: var(--muted); font-size: 15px; }
+  dialog textarea { width: 100%; min-height: 220px; resize: vertical; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .dialog-actions .primary { margin: 0; padding: 9px 16px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Разбор переписки</h1>
+    <p>Добавьте сообщения группового чата. Три агента прочитают их и составят краткое содержание, список задач и принятые решения.</p>
+  </header>
+
+  <main class="layout">
+    <section class="panel chat" aria-labelledby="chat-title">
+      <div class="chat-head">
+        <h2 id="chat-title">Переписка</h2>
+        <span class="count" id="count"></span>
+      </div>
+      <div class="tools">
+        <button class="link-btn" id="load-example" type="button">Загрузить пример</button>
+        <button class="link-btn" id="open-paste" type="button">Вставить текстом</button>
+        <button class="link-btn" id="clear" type="button">Очистить</button>
+      </div>
+      <ul class="messages" id="messages" aria-live="polite"></ul>
+      <form class="composer" id="composer" autocomplete="off">
+        <input class="field name" id="author" placeholder="Имя" list="authors" maxlength="100" aria-label="Имя автора">
+        <datalist id="authors"></datalist>
+        <input class="field" id="text" placeholder="Сообщение" maxlength="4000" aria-label="Текст сообщения">
+        <button class="btn" type="submit">Добавить</button>
+      </form>
+      <button class="primary" id="run" type="button">Разобрать переписку</button>
+    </section>
+
+    <section class="panel digest" id="digest" aria-live="polite" aria-label="Результат разбора">
+      <p class="placeholder">Здесь появится разбор. Добавьте сообщения или загрузите пример, затем нажмите «Разобрать переписку».</p>
+    </section>
+  </main>
+</div>
+
+<dialog id="paste-dialog">
+  <form method="dialog" id="paste-form">
+    <h2>Вставить переписку текстом</h2>
+    <p>По одному сообщению на строку, в формате «Имя: текст».</p>
+    <textarea class="field" id="paste-text" placeholder="Аня: Кто берёт презентацию?&#10;Вика: Я, сделаю до пятницы"></textarea>
+    <div class="dialog-actions">
+      <button class="btn" value="cancel" type="submit">Отмена</button>
+      <button class="primary" value="add" type="submit">Добавить сообщения</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const EXAMPLE = [
+  { author: "Аня", text: "Ребята, до защиты проекта неделя, давайте распределим, кто что делает" },
+  { author: "Боря", text: "Я возьму бэкенд, доделаю API до среды" },
+  { author: "Вика", text: "Подготовлю презентацию до пятницы, скиньте скриншоты" },
+  { author: "Аня", text: "Отлично. Тогда я напишу README и тесты" },
+  { author: "Боря", text: "Договорились, репетицию делаем в субботу в 12:00" },
+  { author: "Вика", text: "Ок, и решили, что выступает Аня" },
+];
+const AGENT_NAMES = { summarizer: "Суммаризатор", extractor: "Аналитик", critic: "Критик" };
+
+let messages = [];
+const colorIndex = new Map();
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+
+function personColor(name) {
+  if (!colorIndex.has(name)) colorIndex.set(name, colorIndex.size % 6);
+  return `var(--p${colorIndex.get(name)})`;
+}
+
+function avatar(name) {
+  const a = el("span", "avatar", name ? name.trim()[0].toUpperCase() : "?");
+  a.setAttribute("aria-hidden", "true");
+  if (name) a.style.setProperty("--person", personColor(name));
+  else a.classList.add("none");
+  return a;
+}
+
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+function renderChat() {
+  const list = $("messages");
+  list.replaceChildren();
+  if (messages.length === 0) {
+    list.append(el("li", "empty-chat", "Сообщений пока нет. Напишите первое внизу или загрузите пример."));
+  }
+  messages.forEach((m, i) => {
+    const li = el("li", "msg");
+    li.style.setProperty("--person", personColor(m.author));
+    const bubble = el("div", "bubble");
+    bubble.append(el("span", "who", m.author), document.createTextNode(m.text));
+    const rm = el("button", "remove", "×");
+    rm.type = "button";
+    rm.setAttribute("aria-label", `Удалить сообщение от ${m.author}`);
+    rm.onclick = () => { messages.splice(i, 1); renderChat(); };
+    bubble.append(rm);
+    li.append(avatar(m.author), bubble);
+    list.append(li);
+  });
+  list.scrollTop = list.scrollHeight;
+
+  const authors = [...new Set(messages.map((m) => m.author))];
+  $("count").textContent = messages.length
+    ? `${messages.length} ${plural(messages.length, "сообщение", "сообщения", "сообщений")}, ${authors.length} ${plural(authors.length, "участник", "участника", "участников")}`
+    : "";
+  $("authors").replaceChildren(...authors.map((a) => { const o = el("option"); o.value = a; return o; }));
+  $("run").disabled = messages.length === 0;
+}
+
+$("composer").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const author = $("author").value.trim();
+  const text = $("text").value.trim();
+  if (!author) { $("author").focus(); return; }
+  if (!text) { $("text").focus(); return; }
+  messages.push({ author, text });
+  $("text").value = "";
+  $("text").focus();
+  renderChat();
+});
+
+$("load-example").onclick = () => { messages = EXAMPLE.map((m) => ({ ...m })); renderChat(); };
+$("clear").onclick = () => { messages = []; renderChat(); showPlaceholder(); };
+$("open-paste").onclick = () => $("paste-dialog").showModal();
+$("paste-dialog").addEventListener("close", () => {
+  const dialog = $("paste-dialog");
+  if (dialog.returnValue !== "add") return;
+  for (const line of $("paste-text").value.split("\n")) {
+    const idx = line.indexOf(":");
+    if (idx <= 0) continue;
+    const author = line.slice(0, idx).trim();
+    const text = line.slice(idx + 1).trim();
+    if (author && text) messages.push({ author, text });
+  }
+  $("paste-text").value = "";
+  renderChat();
+});
+
+function showPlaceholder() {
+  $("digest").replaceChildren(el("p", "placeholder",
+    "Здесь появится разбор. Добавьте сообщения или загрузите пример, затем нажмите «Разобрать переписку»."));
+}
+
+function showError(title, detail) {
+  const box = el("div", "error");
+  box.append(el("strong", "", title), el("p", "", detail));
+  $("digest").replaceChildren(box);
+}
+
+function section(title) {
+  const s = el("div", "section");
+  s.append(el("h3", "", title));
+  return s;
+}
+
+function renderDigest(data) {
+  const root = $("digest");
+  root.replaceChildren();
+
+  const summary = section("Коротко");
+  summary.append(el("p", "summary", data.summary));
+  root.append(summary);
+
+  const tasks = section("Задачи");
+  if (data.tasks.length === 0) {
+    tasks.append(el("p", "none", "Задач не найдено."));
+  } else {
+    const ul = el("ul", "tasks");
+    data.tasks.forEach((t) => {
+      const li = el("li", "task");
+      const box = el("input");
+      box.type = "checkbox";
+      box.setAttribute("aria-label", `Отметить выполненной: ${t.text}`);
+      box.onchange = () => li.classList.toggle("done", box.checked);
+      const body = el("div");
+      body.append(el("div", "task-text", t.text));
+      const meta = el("div", "task-meta");
+      const who = el("span", "who", t.assignee || "Исполнитель не указан");
+      if (t.assignee) who.style.setProperty("--person", personColor(t.assignee));
+      meta.append(who);
+      if (t.deadline) meta.append(el("span", "deadline", t.deadline));
+      body.append(meta);
+      li.append(box, avatar(t.assignee), body);
+      ul.append(li);
+    });
+    tasks.append(ul);
+  }
+  root.append(tasks);
+
+  const decisions = section("Решения");
+  if (data.decisions.length === 0) {
+    decisions.append(el("p", "none", "Решений не найдено."));
+  } else {
+    const ol = el("ul", "decisions");
+    data.decisions.forEach((d) => ol.append(el("li", "", d)));
+    decisions.append(ol);
+  }
+  root.append(decisions);
+
+  const review = section("Проверка");
+  const verdict = el("div", "verdict " + (data.review.approved ? "ok" : "warn"));
+  verdict.append(
+    el("span", "mark", data.review.approved ? "✓" : "!"),
+    el("span", "", data.review.approved
+      ? (data.rounds > 1 ? `Критик одобрил разбор после ${data.rounds - 1}-й доработки.` : "Критик одобрил разбор с первого раза.")
+      : "Критик остался недоволен, но лимит доработок исчерпан."));
+  review.append(verdict);
+  if (data.review.issues.length) {
+    const ul = el("ul", "issues");
+    data.review.issues.forEach((i) => ul.append(el("li", "", i)));
+    review.append(ul);
+  }
+  root.append(review);
+
+  root.append(renderTrace(data.trace));
+}
+
+function renderTrace(trace) {
+  const wrap = el("div", "trace");
+  wrap.append(
+    el("h3", "", "Как работали агенты"),
+    el("p", "trace-note", "Суммаризатор и аналитик работают одновременно, критик проверяет их результат после."));
+
+  const rounds = [...new Set(trace.map((s) => s.round))].sort((a, b) => a - b);
+  const plan = [];
+  let offset = 0;
+  for (const r of rounds) {
+    const steps = trace.filter((s) => s.round === r);
+    const order = { summarizer: 0, extractor: 1 };
+    const parallel = steps.filter((s) => s.agent !== "critic").sort((a, b) => (order[a.agent] ?? 9) - (order[b.agent] ?? 9));
+    const critic = steps.find((s) => s.agent === "critic");
+    const parallelEnd = Math.max(0, ...parallel.map((s) => s.duration_ms));
+    const rows = parallel.map((s) => ({ ...s, start: offset }));
+    if (critic) rows.push({ ...critic, start: offset + parallelEnd });
+    plan.push({ round: r, rows });
+    offset += parallelEnd + (critic ? critic.duration_ms : 0);
+  }
+  const total = Math.max(offset, 1);
+
+  for (const { round, rows } of plan) {
+    if (rounds.length > 1) wrap.append(el("div", "round-label", `Раунд ${round}`));
+    for (const s of rows) {
+      const row = el("div", "bar-row");
+      const track = el("div", "track");
+      const bar = el("div", "bar" + (s.agent === "critic" ? " critic" : ""));
+      bar.style.left = `${(s.start / total) * 100}%`;
+      bar.style.width = `${(s.duration_ms / total) * 100}%`;
+      track.append(bar);
+      const time = s.duration_ms >= 1000 ? `${(s.duration_ms / 1000).toFixed(1)} с` : `${s.duration_ms} мс`;
+      row.append(el("span", "", AGENT_NAMES[s.agent] || s.agent), track, el("span", "ms", time));
+      wrap.append(row);
+    }
+  }
+  return wrap;
+}
+
+$("run").onclick = async () => {
+  const run = $("run");
+  run.disabled = true;
+  const loading = el("div", "loading");
+  loading.append(el("span", "spinner"), el("span", "", "Агенты читают переписку…"));
+  $("digest").replaceChildren(loading);
+
+  try {
+    const resp = await fetch("/digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    });
+    const data = await resp.json().catch(() => null);
+    if (resp.ok && data) {
+      renderDigest(data);
+    } else if (resp.status === 422) {
+      showError("Переписка не прошла проверку",
+        "Проверьте, что у каждого сообщения есть имя и текст, а сообщений не больше 500.");
+    } else if (resp.status === 502) {
+      showError("Модель не ответила",
+        (data && data.detail) || "Проверьте, что модель запущена и настройки в .env верны.");
+    } else {
+      showError(`Сервер вернул ошибку ${resp.status}`, (data && data.detail) || "Посмотрите лог сервера в терминале.");
+    }
+  } catch {
+    showError("Сервер недоступен", "Убедитесь, что сервис запущен командой uvicorn app.main:app --reload.");
+  } finally {
+    run.disabled = messages.length === 0;
+  }
+};
+
+renderChat();
+</script>
+</body>
+</html>
